@@ -1,5 +1,8 @@
 # 자녀 목소리 AI 애착인형 프로젝트
 
+![애착인형-resize](md-images/%EC%95%A0%EC%B0%A9%EC%9D%B8%ED%98%95-resize.png)
+
+
 
 ## 배경
 
@@ -87,4 +90,126 @@
 ![멀티캠퍼스 노력상](md-images/%EB%A9%80%ED%8B%B0%EC%BA%A0%ED%8D%BC%EC%8A%A4%20%EB%85%B8%EB%A0%A5%EC%83%81.jpg)
 
 ## 코드리뷰
+
+
+
+> - `데이터 전처리`
+
+```python
+# 특수기호 제거
+def text_preprocessing(self, text):
+    sentence = text.split(' ')
+    total_sentence = []
+    for word in sentence:
+        prepro_word = re.sub(r'[^ㄱ-ㅎㅏ-ㅣ가-힣0-9a-zA-Z]', '', word)
+        total_sentence.append(prepro_word)
+    result = ''.join(total_sentence)
+    return result
+
+# 토크나이징
+def tokenize(self, text):
+    okt = Okt()
+    tokens = okt.pos(text, stem=True)
+    total_words = []
+    for word, tag in tokens:
+        if tag not in ['Josa']:
+            total_words.append(word)
+    result = ' '.join(total_words)
+    return result
+```
+
+
+
+> - `TF-IDF & 코사인 유사도`
+
+```python
+def cos_answer(self, new_q, new_df, df):
+    tfidf = TfidfVectorizer()
+    new_q = pd.Series(new_q)
+    all_q = new_df.question.append(new_q)
+    tfidf_matrix = tfidf.fit_transform(all_q)
+    cosine_sim = linear_kernel(tfidf_matrix, tfidf_matrix)
+    questions = cosine_sim[-1][:-1]
+    if 1. in questions:
+        indices = np.where(questions == 1.)
+        indices = indices[0].tolist()
+        q_idx = np.random.choice(indices, 1)
+        return df.question[q_idx[0]], df.answer[q_idx[0]], questions[q_idx[0]]
+    elif max(questions) < 0.45:
+        return None, '아직 정확하게 답변하기 어려워요', max(questions)
+    else:
+        q_idx = questions.argsort()[-1]
+        return df.question[q_idx], df.answer[q_idx], questions[q_idx]
+```
+
+
+
+> - `정답 예측`
+
+```python
+def predict(self, question, new_df, df):
+    real_question = []
+    real_answer = []
+    sel_q = []
+    cos = []
+
+    new_q = self.text_preprocessing(question)
+    new_q = self.tokenize(new_q)
+
+    selected_question, selected_answer, cosin = self.cos_answer(new_q, new_df, df)
+
+    real_question.append(question)
+    real_answer.append(selected_answer)
+    sel_q.append(selected_question)
+    cos.append(cosin)
+
+    result = pd.DataFrame({
+        'question': real_question,
+        'selected_question': sel_q,
+        'cosine_similarity': cos,
+        'answer': real_answer
+    })
+
+    return real_answer[0], sel_q[0], cos[0]
+```
+
+
+
+> - `MQTT + 대화 모델`
+
+```python
+class Led_Mqtt():
+    def __init__(self,state,led_out,led_on,pwm):
+        client = mqtt.Client()
+        client.on_connect = self.on_connect
+        client.on_message = self.on_message
+
+        client.connect("13.209.193.138", 1883, 60)
+
+        client.loop_forever()
+
+    def on_connect(self,client, userdata, flags, rc):
+        print("connect.." + str(rc))
+        if rc == 0:
+            client.subscribe("stt/test")
+        else:
+            print("connect fail..")
+	
+    # input text 받을 경우 아래 함수로 답변 출력 파일 생성
+    def on_message(self, client, userdata, msg):
+        self.myval = msg.payload.decode("utf-8")
+        msg = self.myval
+
+        DATA_PATH = './data_in/Total_chat_data.csv'
+        NEW_DATA_PATH = './data_in/prepro_data.csv'
+        df = pd.read_csv(DATA_PATH, encoding='utf-8')
+        new_df = pd.read_csv(NEW_DATA_PATH, encoding='utf-8')
+
+        result, sel_q, cosine = self.predict(msg, new_df, df)
+
+        print(result)
+
+        tts = gTTS(text=result, lang='ko')
+        tts.save('test.wav')
+```
 
