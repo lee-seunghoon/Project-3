@@ -213,3 +213,51 @@ class Led_Mqtt():
         tts.save('test.wav')
 ```
 
+
+
+> - 텍스트 유사동 딥러닝 MaLSTM 모델
+
+```python
+# 맨하탄 거리 유사도
+class ManDist(Layer):
+    """
+    Keras Custom Layer that calculates Manhattan Distance.
+    """
+
+    # initialize the layer, No need to include inputs parameter!
+    def __init__(self, **kwargs):
+        self.result = None
+        super(ManDist, self).__init__(**kwargs)
+
+    # input_shape will automatic collect input shapes to build layer
+    def build(self, input_shape):
+        super(ManDist, self).build(input_shape)
+
+    # This is where the layer's logic lives.
+    def call(self, x, **kwargs):
+        self.result = K.exp(-K.sum(K.abs(x[0] - x[1]), axis=1, keepdims=True))
+        return self.result
+
+    # return output shape
+    def compute_output_shape(self, input_shape):
+        return K.int_shape(self.result)
+
+# 모델 Layer 
+x = Sequential()
+x.add(Embedding(max_features, embed_size, input_shape=(maxlen,)))
+x.add(LSTM(100))
+
+shared_model = x
+
+left_input = Input(shape=(maxlen,), dtype='int32')
+right_input = Input(shape=(maxlen,), dtype='int32')
+
+malstm_distance = ManDist()([shared_model(left_input), shared_model(right_input)])
+model = Model(inputs=[left_input, right_input], outputs=[malstm_distance])
+
+model.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
+model.summary()
+```
+
+![image-20210610202845774](md-images/image-20210610202845774.png)
+
