@@ -215,49 +215,89 @@ class Led_Mqtt():
 
 
 
-> - 텍스트 유사동 딥러닝 MaLSTM 모델
+> - 텍스트 유사도 딥러닝 MaLSTM 모델
 
 ```python
-# 맨하탄 거리 유사도
-class ManDist(Layer):
-    """
-    Keras Custom Layer that calculates Manhattan Distance.
-    """
-
-    # initialize the layer, No need to include inputs parameter!
-    def __init__(self, **kwargs):
-        self.result = None
-        super(ManDist, self).__init__(**kwargs)
-
-    # input_shape will automatic collect input shapes to build layer
-    def build(self, input_shape):
-        super(ManDist, self).build(input_shape)
-
-    # This is where the layer's logic lives.
-    def call(self, x, **kwargs):
-        self.result = K.exp(-K.sum(K.abs(x[0] - x[1]), axis=1, keepdims=True))
-        return self.result
-
-    # return output shape
-    def compute_output_shape(self, input_shape):
-        return K.int_shape(self.result)
-
-# 모델 Layer 
-x = Sequential()
-x.add(Embedding(max_features, embed_size, input_shape=(maxlen,)))
-x.add(LSTM(100))
-
-shared_model = x
-
-left_input = Input(shape=(maxlen,), dtype='int32')
-right_input = Input(shape=(maxlen,), dtype='int32')
-
-malstm_distance = ManDist()([shared_model(left_input), shared_model(right_input)])
-model = Model(inputs=[left_input, right_input], outputs=[malstm_distance])
-
-model.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
-model.summary()
+class MaLSTM(tf.keras.Model):
+    
+    def __init__(self, **kargs):
+        super(MaLSTM, self).__init__(name=model_name)
+        self.embedding = layers.Embedding(input_dim=kargs['vocab_size'],
+                                     output_dim=kargs['embedding_dimension'])
+        self.lstm = layers.LSTM(units=kargs['lstm_dimension'])
+        
+    def call(self, x):
+        x1, x2 = x
+        x1 = self.embedding(x1)
+        x2 = self.embedding(x2)
+        x1 = self.lstm(x1)
+        x2 = self.lstm(x2)
+        x = tf.exp(-tf.reduce_sum(tf.abs(x1 - x2), axis=1))
+        
+        return x
 ```
 
-![image-20210610202845774](md-images/image-20210610202845774.png)
+```python
+# Config
+DATA_OUT_PATH = '/content/drive/MyDrive/Colab Notebooks/TF-IDF_Test/'
+model_name = 'malstm_similarity'
+BATCH_SIZE = 2
+NUM_EPOCHS = 20
+VALID_SPLIT = 0.1
 
+kargs = {
+    'vocab_size': prepro_configs['vocab_size'],
+    'embedding_dimension': 100,
+    'lstm_dimension': 150,
+}
+```
+
+
+
+> - model 정의
+
+```python
+model = MaLSTM(**kargs)
+model.compile(optimizer=tf.keras.optimizers.Adam(1e-3),
+              loss=tf.keras.losses.BinaryCrossentropy(),
+              metrics=[tf.keras.metrics.BinaryAccuracy(name='accuracy')])
+
+checkpoint_path = DATA_OUT_PATH + '/weights.h5'
+checkpoint_dir = os.path.dirname(checkpoint_path)
+
+cp_callback = ModelCheckpoint(
+    checkpoint_path, 
+    monitor='val_accuracy', 
+    verbose=1, 
+    save_best_only=True, 
+    save_weights_only=True)
+
+# 학습
+history = model.fit((q1_data, q2_data), 
+                    labels, 
+                    batch_size=BATCH_SIZE, 
+                    epochs=NUM_EPOCHS,
+                    validation_split=VALID_SPLIT,
+                    verbose=1,
+                    callbacks=[cp_callback])
+```
+
+
+
+> - Accuracy 그래프
+
+```python
+def plot_graphs(history, string):
+    plt.plot(history.history[string])
+    plt.plot(history.history['val_'+string], '')
+    plt.xlabel("Epochs")
+    plt.ylabel(string)
+    plt.legend([string, 'val_'+string])
+    plt.show()
+```
+
+```python
+plot_graphs(history, 'accuracy')
+```
+
+![image-20210622093624564](md-images/image-20210622093624564.png)
