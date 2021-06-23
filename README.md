@@ -91,6 +91,22 @@
 
 ## 코드리뷰
 
+> - `라이브러리 모음`
+
+```python
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import linear_kernel
+import pandas as pd
+import numpy as np
+import re
+from konlpy.tag import Okt
+from konlpy.tag import Mecab
+from sklearn.metrics.pairwise import euclidean_distances # ==> 유클리디언 유사도
+from sklearn.metrics.pairwise import manhattan_distances # ==> 맨하탄 유사도
+```
+
+
+
 
 
 > - `데이터 전처리`
@@ -106,7 +122,7 @@ def text_preprocessing(self, text):
     result = ''.join(total_sentence)
     return result
 
-# 토크나이징
+# Okt 형태소 분석기 활용 토크나이징
 def tokenize(self, text):
     okt = Okt()
     tokens = okt.pos(text, stem=True)
@@ -116,7 +132,20 @@ def tokenize(self, text):
             total_words.append(word)
     result = ' '.join(total_words)
     return result
+
+# Mecab 형태소 분석기 활용 토크나이징
+def mecab_tokenize(text):
+    mecab = Mecab()
+    select_token = []
+    tokens = mecab.pos(text)
+    for word, tag in tokens:
+        if tag not in ['JKS', 'EC', 'JKB', 'JX', 'EP', 'NNB', 'VCP']:
+            select_token.append(word)
+    result = ' '.join(select_token)
+    return result
 ```
+
+
 
 
 
@@ -141,6 +170,63 @@ def cos_answer(self, new_q, new_df, df):
         q_idx = questions.argsort()[-1]
         return df.question[q_idx], df.answer[q_idx], questions[q_idx]
 ```
+
+
+
+
+
+> - `TF-IDF & 유클리디언 유사도`
+
+```python
+def euc_answer(new_q, new_df):
+    tfidf = TfidfVectorizer()
+    new_q = pd.Series(new_q)
+    all_q = new_df.question.append(new_q)
+    tfidf_matrix = tfidf.fit_transform(all_q)
+
+    norm = np.sum(tfidf_matrix)
+    tfidf_norm_l1 = tfidf_matrix / norm
+    euc_sim = euclidean_distances(tfidf_norm_l1,tfidf_norm_l1)
+    questions = euc_sim[-1][:-1]
+    if 0. in questions:
+        indices = np.where(questions == 0.)
+        indices = indices[0].tolist()
+        q_idx = np.random.choice(indices, 1)
+        return df.answer[q_idx[0]]
+    else:
+        q_idx = questions.argsort()[0]
+        return df.answer[q_idx]
+```
+
+
+
+
+
+> - `TF-IDF & 맨하탄 유사도`
+
+```python
+def manh_answer(new_q, new_df):
+    tfidf = TfidfVectorizer()
+    new_q = pd.Series(new_q)
+    all_q = new_df.question.append(new_q)
+    tfidf_matrix = tfidf.fit_transform(all_q)
+
+    norm = np.sum(tfidf_matrix)
+    tfidf_norm_l1 = tfidf_matrix / norm
+    manht_sim = manhattan_distances(tfidf_norm_l1, tfidf_norm_l1)
+    questions = manht_sim[-1][:-1]
+    
+    if 0. in questions:
+        indices = np.where(questions == 0.)
+        indices = indices[0].tolist()
+        q_idx = np.random.choice(indices, 1)
+        return df.answer[q_idx[0]]
+    else:
+        q_idx = questions.argsort()[0]
+        return df.answer[q_idx]
+```
+
+
 
 
 
@@ -172,6 +258,8 @@ def predict(self, question, new_df, df):
 
     return real_answer[0], sel_q[0], cos[0]
 ```
+
+
 
 
 
@@ -215,7 +303,9 @@ class Led_Mqtt():
 
 
 
-> - 텍스트 유사도 딥러닝 MaLSTM 모델
+
+
+> - `텍스트 유사도 딥러닝 MaLSTM 모델`
 
 ```python
 class MaLSTM(tf.keras.Model):
@@ -254,7 +344,9 @@ kargs = {
 
 
 
-> - model 정의
+
+
+> - `model 정의`
 
 ```python
 model = MaLSTM(**kargs)
@@ -284,7 +376,9 @@ history = model.fit((q1_data, q2_data),
 
 
 
-> - Accuracy 그래프
+
+
+> - `Accuracy 그래프`
 
 ```python
 def plot_graphs(history, string):
