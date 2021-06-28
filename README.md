@@ -164,6 +164,20 @@ def cos_answer(self, new_q, new_df, df):
         indices = indices[0].tolist()
         q_idx = np.random.choice(indices, 1)
         return df.question[q_idx[0]], df.answer[q_idx[0]], questions[q_idx[0]]
+    elif max(questions)>=0.45 and max(questions)<0.65:
+        q_idx = quuestions.argsort()[-1]
+        origin_question = df.question[q_idx]
+        sel_question = questions[q_idx]
+        model = MaLSTM(**kargs)
+        model.compile(optimizer=tf.keras.optimizers.Adam(1e-3),
+                      loss=tf.keras.losses.BinaryCrossentropy(),
+                      metrics=[tf.keras.metrics.BinaryAccuracy(name='accuracy')])
+        model.load_weights('./data_in/weights.h5')
+        result = model.predict(origin_question, sel_question)
+        if result > 0.5 :
+            return df.question[q_idx], df.answer[q_idx], questions[q_idx]
+        else:
+            return None, '아직 정확하게 답변하기 어려워요', max(questions)
     elif max(questions) < 0.45:
         return None, '아직 정확하게 답변하기 어려워요', max(questions)
     else:
@@ -395,3 +409,4 @@ plot_graphs(history, 'accuracy')
 ```
 
 ![image-20210622093624564](md-images/image-20210622093624564.png)
+
